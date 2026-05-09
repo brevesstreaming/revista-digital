@@ -13,47 +13,80 @@
             margin: 0;
             padding: 0;
             display: flex; 
+            flex-direction: column;
             justify-content: center;
             align-items: center;
             height: 100vh;
             overflow: hidden;
             font-family: Arial, sans-serif;
         }
+        
+        /* Contenedor adaptativo que respeta la proporción */
         #book-container { 
-            width: 95vw; 
-            height: 90vh; 
+            width: 90vw; 
+            height: 80vh; 
             max-width: 1100px;
             max-height: 750px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.9); 
+            display: none; /* Se muestra al cargar */
         }
+
         .page { 
             background-color: white; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
         }
+
+        /* Evita que el canvas se deforme */
         canvas { 
-            max-width: 100%; 
-            max-height: 100%; 
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: contain; /* Ajuste perfecto sin estirar */
         }
-        /* Mensaje de carga */
+
+        /* Botones de navegación simples abajo */
+        .controles {
+            margin-top: 20px;
+            display: flex;
+            gap: 20px;
+        }
+
+        .btn-nav {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        .btn-nav:hover {
+            background-color: #555;
+        }
+
         #loader {
-            position: absolute;
             color: #ccc;
             font-size: 18px;
-            z-index: 10;
         }
     </style>
 </head>
 <body>
     
-    <div id="loader">Cargando páginas... por favor espere.</div>
+    <div id="loader">Procesando páginas de la revista...</div>
+    
     <div id="book-container"></div>
+
+    <div class="controles" id="controles-panel" style="display: none;">
+        <button class="btn-nav" id="btn-prev">◀ Anterior</button>
+        <button class="btn-nav" id="btn-next">Siguiente ▶</button>
+    </div>
 
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-        // IMPORTANTE: El archivo PDF en cada carpeta siempre debe llamarse igual: "revista.pdf"
         const pdfUrl = 'revista.pdf'; 
 
         window.addEventListener('DOMContentLoaded', async () => {
@@ -61,12 +94,36 @@
                 const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
                 const bookContainer = document.getElementById('book-container');
                 const loader = document.getElementById('loader');
+                const controles = document.getElementById('controles-panel');
                 const numPages = pdf.numPages; 
                 
-                // Procesar todas las páginas del PDF
+                let bookWidth = 0;
+                let bookHeight = 0;
+
+                // Procesamos la primera página para obtener la proporción exacta del PDF original
+                const firstPage = await pdf.getPage(1);
+                const originalViewport = firstPage.getViewport({ scale: 1.5 });
+                
+                // Calculamos dimensiones proporcionales para el visor
+                bookHeight = bookContainer.clientHeight;
+                // El ancho de una página abierta doble debe ser proporcional a su alto
+                const aspecto = originalViewport.width / originalViewport.height;
+                bookWidth = (bookHeight * aspecto) * 2; 
+
+                // Si el ancho calculado supera al del monitor, lo adaptamos al revés
+                if (bookWidth > bookContainer.clientWidth) {
+                    bookWidth = bookContainer.clientWidth;
+                    bookHeight = (bookWidth / 2) / aspecto;
+                }
+
+                // Ajustamos el contenedor al tamaño proporcional calculado
+                bookContainer.style.width = `${bookWidth}px`;
+                bookContainer.style.height = `${bookHeight}px`;
+
+                // Renderizar todas las páginas
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.5 }); // Escala para excelente calidad visual
+                    const viewport = page.getViewport({ scale: 1.5 });
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
@@ -81,24 +138,32 @@
                     bookContainer.appendChild(pageDiv);
                 }
 
-                // Ocultar cargador
                 loader.style.display = 'none';
+                bookContainer.style.display = 'block';
+                controles.style.display = 'flex';
 
-                // Inicializar Flipbook adaptando el tamaño
-                const containerWidth = bookContainer.clientWidth;
-                const containerHeight = bookContainer.clientHeight;
-
+                // Inicializar el Flipbook con el tamaño exacto proporcional
                 const pageFlip = new St.PageFlip(bookContainer, {
-                    width: containerWidth / 2, 
-                    height: containerHeight,
+                    width: Math.round(bookWidth / 2), 
+                    height: Math.round(bookHeight),
                     showCover: true,
-                    usePortrait: false // Mantiene formato libro (doble página abierta)
+                    usePortrait: false,
+                    drawShadow: true
                 });
                 
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
+                // Programar los botones de navegación
+                document.getElementById('btn-prev').addEventListener('click', () => {
+                    pageFlip.flipPrev();
+                });
+                document.getElementById('btn-next').addEventListener('click', () => {
+                    pageFlip.flipNext();
+                });
+
             } catch (error) {
                 console.error("Error al cargar el PDF: ", error);
-                document.getElementById('loader').innerText = "Error al cargar la revista.";
+                document.getElementById('loader').innerText = "Error al procesar el archivo PDF.";
             }
         });
     </script>
