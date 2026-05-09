@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revista Interactiva - Breves</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+    
+    <style>
+        body { 
+            background: #1c1c1c; 
+            margin: 0;
+            padding: 0;
+            display: flex; 
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        #book-container { 
+            width: 95vw; 
+            height: 90vh; 
+            max-width: 1100px;
+            max-height: 750px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9); 
+        }
+        .page { 
+            background-color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+        }
+        canvas { 
+            max-width: 100%; 
+            max-height: 100%; 
+        }
+        /* Mensaje de carga */
+        #loader {
+            position: absolute;
+            color: #ccc;
+            font-size: 18px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    
+    <div id="loader">Cargando páginas... por favor espere.</div>
+    <div id="book-container"></div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+        // IMPORTANTE: El archivo PDF en cada carpeta siempre debe llamarse igual: "revista.pdf"
+        const pdfUrl = 'revista.pdf'; 
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+                const bookContainer = document.getElementById('book-container');
+                const loader = document.getElementById('loader');
+                const numPages = pdf.numPages; 
+                
+                // Procesar todas las páginas del PDF
+                for (let i = 1; i <= numPages; i++) {
+                    const page = await pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: 1.5 }); // Escala para excelente calidad visual
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.height = viewport.height;
+                    canvas.width = viewport.width;
+
+                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+
+                    const pageDiv = document.createElement('div');
+                    pageDiv.className = 'page';
+                    pageDiv.appendChild(canvas);
+                    bookContainer.appendChild(pageDiv);
+                }
+
+                // Ocultar cargador
+                loader.style.display = 'none';
+
+                // Inicializar Flipbook adaptando el tamaño
+                const containerWidth = bookContainer.clientWidth;
+                const containerHeight = bookContainer.clientHeight;
+
+                const pageFlip = new St.PageFlip(bookContainer, {
+                    width: containerWidth / 2, 
+                    height: containerHeight,
+                    showCover: true,
+                    usePortrait: false // Mantiene formato libro (doble página abierta)
+                });
+                
+                pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+            } catch (error) {
+                console.error("Error al cargar el PDF: ", error);
+                document.getElementById('loader').innerText = "Error al cargar la revista.";
+            }
+        });
+    </script>
+</body>
+</html>
