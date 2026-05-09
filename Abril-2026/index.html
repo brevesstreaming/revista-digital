@@ -21,13 +21,18 @@
             font-family: Arial, sans-serif;
         }
         
-        /* Contenedor adaptativo que respeta la proporción */
+        /* Contenedor adaptativo centrado */
+        #book-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 95vw;
+            height: 80vh;
+        }
+
         #book-container { 
-            width: 90vw; 
-            height: 80vh; 
-            max-width: 1100px;
-            max-height: 750px;
-            display: none; /* Se muestra al cargar */
+            box-shadow: 0 10px 40px rgba(0,0,0,0.9); 
+            display: none; /* Se activa al renderizar las hojas */
         }
 
         .page { 
@@ -35,31 +40,32 @@
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.15);
         }
 
-        /* Evita que el canvas se deforme */
+        /* Ajuste de imagen interna */
         canvas { 
             width: 100% !important;
             height: 100% !important;
-            object-fit: contain; /* Ajuste perfecto sin estirar */
+            object-fit: contain; 
         }
 
-        /* Botones de navegación simples abajo */
+        /* Botones de navegación */
         .controles {
-            margin-top: 20px;
+            margin-top: 15px;
             display: flex;
             gap: 20px;
+            z-index: 10;
         }
 
         .btn-nav {
             background-color: #333;
             color: white;
             border: 1px solid #555;
-            padding: 8px 16px;
+            padding: 10px 20px;
             cursor: pointer;
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 15px;
             transition: background 0.2s;
         }
 
@@ -70,6 +76,7 @@
         #loader {
             color: #ccc;
             font-size: 18px;
+            position: absolute;
         }
     </style>
 </head>
@@ -77,7 +84,9 @@
     
     <div id="loader">Procesando páginas de la revista...</div>
     
-    <div id="book-container"></div>
+    <div id="book-wrapper">
+        <div id="book-container"></div>
+    </div>
 
     <div class="controles" id="controles-panel" style="display: none;">
         <button class="btn-nav" id="btn-prev">◀ Anterior</button>
@@ -96,34 +105,34 @@
                 const loader = document.getElementById('loader');
                 const controles = document.getElementById('controles-panel');
                 const numPages = pdf.numPages; 
-                
-                let bookWidth = 0;
-                let bookHeight = 0;
 
-                // Procesamos la primera página para obtener la proporción exacta del PDF original
+                // 1. OBTENER PROPORCIÓN DEL PDF (Relación de aspecto real)
                 const firstPage = await pdf.getPage(1);
-                const originalViewport = firstPage.getViewport({ scale: 1.5 });
-                
-                // Calculamos dimensiones proporcionales para el visor
-                bookHeight = bookContainer.clientHeight;
-                // El ancho de una página abierta doble debe ser proporcional a su alto
-                const aspecto = originalViewport.width / originalViewport.height;
-                bookWidth = (bookHeight * aspecto) * 2; 
+                const originalViewport = firstPage.getViewport({ scale: 1.0 });
+                const ratio = originalViewport.width / originalViewport.height;
 
-                // Si el ancho calculado supera al del monitor, lo adaptamos al revés
-                if (bookWidth > bookContainer.clientWidth) {
-                    bookWidth = bookContainer.clientWidth;
-                    bookHeight = (bookWidth / 2) / aspecto;
+                // 2. CALCULAR TAMAÑO MÁXIMO EN BASE A LA PANTALLA DISPONIBLE
+                const maxWidth = window.innerWidth * 0.9;  // 90% del ancho de la pantalla
+                const maxHeight = window.innerHeight * 0.75; // 75% del alto de la pantalla
+
+                let finalWidth = maxWidth;
+                let finalHeight = (maxWidth / 2) / ratio; // Dividido 2 porque son 2 páginas abiertas
+
+                // Si al calcular el alto se nos pasa del límite físico de la pantalla, recalculamos en base al alto
+                if (finalHeight > maxHeight) {
+                    finalHeight = maxHeight;
+                    finalWidth = (maxHeight * ratio) * 2;
                 }
 
-                // Ajustamos el contenedor al tamaño proporcional calculado
-                bookContainer.style.width = `${bookWidth}px`;
-                bookContainer.style.height = `${bookHeight}px`;
+                // Ajustamos el contenedor al tamaño definitivo calculado
+                bookContainer.style.width = `${Math.round(finalWidth)}px`;
+                bookContainer.style.height = `${Math.round(finalHeight)}px`;
 
-                // Renderizar todas las páginas
+                // 3. RENDERIZAR LAS PÁGINAS DEL PDF EN LOS LIENZOS
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 1.5 });
+                    // Usamos una escala intermedia-alta para equilibrar excelente calidad y rendimiento
+                    const viewport = page.getViewport({ scale: 1.6 });
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
@@ -138,22 +147,24 @@
                     bookContainer.appendChild(pageDiv);
                 }
 
+                // Ocultar cargador y mostrar elementos del visor
                 loader.style.display = 'none';
                 bookContainer.style.display = 'block';
                 controles.style.display = 'flex';
 
-                // Inicializar el Flipbook con el tamaño exacto proporcional
+                // 4. INICIALIZAR EL VISOR FLIPBOOK
                 const pageFlip = new St.PageFlip(bookContainer, {
-                    width: Math.round(bookWidth / 2), 
-                    height: Math.round(bookHeight),
+                    width: Math.round(finalWidth / 2), // Ancho de una página individual
+                    height: Math.round(finalHeight),   // Alto del libro completo
                     showCover: true,
                     usePortrait: false,
-                    drawShadow: true
+                    drawShadow: true,
+                    flippingTime: 800 // Velocidad suave del efecto en milisegundos
                 });
                 
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
 
-                // Programar los botones de navegación
+                // Controladores de botones
                 document.getElementById('btn-prev').addEventListener('click', () => {
                     pageFlip.flipPrev();
                 });
@@ -163,7 +174,7 @@
 
             } catch (error) {
                 console.error("Error al cargar el PDF: ", error);
-                document.getElementById('loader').innerText = "Error al procesar el archivo PDF.";
+                document.getElementById('loader').innerText = "Error al procesar el archivo PDF de la revista.";
             }
         });
     </script>
