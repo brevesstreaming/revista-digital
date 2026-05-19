@@ -20,9 +20,9 @@
             overflow: hidden;
             font-family: Arial, sans-serif;
             position: relative;
-            /* Suavizado de fuentes a nivel de sistema */
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
         }
         
         #book-wrapper {
@@ -52,13 +52,14 @@
             box-shadow: inset 0 0 20px rgba(0,0,0,0.15);
         }
 
-        /* Fuerza al canvas a no pixelarse al estirarse */
+        /* Maximiza el contraste y nitidez en bordes tipográficos por CSS */
         canvas { 
             width: 100% !important;
             height: 100% !important;
             object-fit: contain;
             image-rendering: -webkit-optimize-contrast;
-            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+            filter: contrast(1.02) brightness(1.01);
         }
 
         .controles {
@@ -111,7 +112,7 @@
 </head>
 <body>
     
-    <div id="loader">Optimizando textos y páginas...</div>
+    <div id="loader">Cargando edición en alta fidelidad...</div>
     
     <button id="btn-fullscreen" style="display: none;">Fullscreen ⛶</button>
 
@@ -156,26 +157,29 @@
                 bookContainer.style.width = `${Math.round(finalWidth)}px`;
                 bookContainer.style.height = `${Math.round(finalHeight)}px`;
 
-                // ESTRATEGIA DE NITIDEZ: Ajuste dinámico basado en la densidad de pantalla real (Retina/HD)
-                const dpr = window.devicePixelRatio || 1;
-                // Dejamos un tope seguro de escala para que el navegador jamás rompa o deforme el canvas
-                const targetScale = Math.min(dpr * 2, 2.5);
+                // Escalado fijo óptimo de súper muestreo gráfico
+                const renderScale = 2.2;
 
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: targetScale }); 
+                    const viewport = page.getViewport({ scale: renderScale }); 
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
                     
-                    // Configuraciones críticas para evitar el efecto borroso en textos
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
                     
+                    // Forzar el motor gráfico a máxima nitidez y subpíxeles limpios
                     context.imageSmoothingEnabled = true;
                     context.imageSmoothingQuality = 'high';
+                    context.textBaseline = 'top';
 
-                    await page.render({ canvasContext: context, viewport: viewport }).promise;
+                    await page.render({ 
+                        canvasContext: context, 
+                        viewport: viewport,
+                        intent: 'print' // Forza el renderizado en modo imprenta (traza las fuentes con más grosor)
+                    }).promise;
 
                     const pageDiv = document.createElement('div');
                     pageDiv.className = 'page';
@@ -199,22 +203,14 @@
                 
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
 
-                // Navegación
-                document.getElementById('btn-prev').addEventListener('click', () => {
-                    pageFlip.flipPrev();
-                });
-                document.getElementById('btn-next').addEventListener('click', () => {
-                    pageFlip.flipNext();
-                });
+                document.getElementById('btn-prev').addEventListener('click', () => { pageFlip.flipPrev(); });
+                document.getElementById('btn-next').addEventListener('click', () => { pageFlip.flipNext(); });
 
-                // Pantalla completa
                 function toggleFullscreen() {
                     if (!document.fullscreenElement) {
                         document.documentElement.requestFullscreen().then(() => {
                             setTimeout(() => { pageFlip.update(); }, 350);
-                        }).catch(err => {
-                            console.log(`Error: ${err.message}`);
-                        });
+                        }).catch(err => { console.log(`Error: ${err.message}`); });
                     } else {
                         document.exitFullscreen().then(() => {
                             setTimeout(() => { pageFlip.update(); }, 350);
@@ -224,7 +220,6 @@
 
                 btnFull.addEventListener('click', toggleFullscreen);
                 bookContainer.addEventListener('dblclick', toggleFullscreen);
-
                 document.addEventListener('fullscreenchange', () => {
                     setTimeout(() => { pageFlip.update(); }, 350);
                 });
