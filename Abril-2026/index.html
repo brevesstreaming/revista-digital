@@ -20,15 +20,17 @@
             overflow: hidden;
             font-family: Arial, sans-serif;
             position: relative;
+            /* Suavizado de fuentes a nivel de sistema */
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
         
-        /* Contenedor adaptativo centrado */
         #book-wrapper {
             display: flex;
             justify-content: center;
             align-items: center;
             width: 95vw;
-            height: 82vh; /* Un poquito más alto por defecto */
+            height: 82vh; 
             transition: height 0.3s;
         }
 
@@ -38,9 +40,8 @@
             cursor: pointer;
         }
 
-        /* Si el navegador entra en Pantalla Completa, agrandamos el contenedor */
         body:fullscreen #book-wrapper {
-            height: 92vh; /* Ocupa casi todo el monitor */
+            height: 92vh; 
         }
 
         .page { 
@@ -51,14 +52,15 @@
             box-shadow: inset 0 0 20px rgba(0,0,0,0.15);
         }
 
-        /* Ajuste de imagen interna sin deformar */
+        /* Fuerza al canvas a no pixelarse al estirarse */
         canvas { 
             width: 100% !important;
             height: 100% !important;
-            object-fit: contain; 
+            object-fit: contain;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
         }
 
-        /* Botones de navegación */
         .controles {
             margin-top: 12px;
             display: flex;
@@ -81,7 +83,6 @@
             background-color: #555;
         }
 
-        /* Botón de Pantalla Completa Flotante */
         #btn-fullscreen {
             position: absolute;
             top: 15px;
@@ -110,7 +111,7 @@
 </head>
 <body>
     
-    <div id="loader">Procesando páginas de la revista...</div>
+    <div id="loader">Optimizando textos y páginas...</div>
     
     <button id="btn-fullscreen" style="display: none;">Fullscreen ⛶</button>
 
@@ -137,12 +138,10 @@
                 const btnFull = document.getElementById('btn-fullscreen');
                 const numPages = pdf.numPages; 
 
-                // 1. OBTENER PROPORCIÓN DEL PDF
                 const firstPage = await pdf.getPage(1);
                 const originalViewport = firstPage.getViewport({ scale: 1.0 });
                 const ratio = originalViewport.width / originalViewport.height;
 
-                // 2. CALCULAR TAMAÑO MÁXIMO (Ajustado para optimizar espacio)
                 const maxWidth = window.innerWidth * 0.95;  
                 const maxHeight = window.innerHeight * 0.82; 
 
@@ -157,15 +156,24 @@
                 bookContainer.style.width = `${Math.round(finalWidth)}px`;
                 bookContainer.style.height = `${Math.round(finalHeight)}px`;
 
-                // 3. RENDERIZAR PÁGINAS A ALTA RESOLUCIÓN (Escala 3.0 para máxima nitidez)
+                // ESTRATEGIA DE NITIDEZ: Ajuste dinámico basado en la densidad de pantalla real (Retina/HD)
+                const dpr = window.devicePixelRatio || 1;
+                // Dejamos un tope seguro de escala para que el navegador jamás rompa o deforme el canvas
+                const targetScale = Math.min(dpr * 2, 2.5);
+
                 for (let i = 1; i <= numPages; i++) {
                     const page = await pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: 3.0 }); 
+                    const viewport = page.getViewport({ scale: targetScale }); 
                     
                     const canvas = document.createElement('canvas');
                     const context = canvas.getContext('2d');
+                    
+                    // Configuraciones críticas para evitar el efecto borroso en textos
                     canvas.height = viewport.height;
                     canvas.width = viewport.width;
+                    
+                    context.imageSmoothingEnabled = true;
+                    context.imageSmoothingQuality = 'high';
 
                     await page.render({ canvasContext: context, viewport: viewport }).promise;
 
@@ -180,7 +188,6 @@
                 controles.style.display = 'flex';
                 btnFull.style.display = 'block';
 
-                // 4. INICIALIZAR EL VISOR FLIPBOOK
                 const pageFlip = new St.PageFlip(bookContainer, {
                     width: Math.round(finalWidth / 2), 
                     height: Math.round(finalHeight),   
@@ -192,7 +199,7 @@
                 
                 pageFlip.loadFromHTML(document.querySelectorAll('.page'));
 
-                // Controladores de botones
+                // Navegación
                 document.getElementById('btn-prev').addEventListener('click', () => {
                     pageFlip.flipPrev();
                 });
@@ -200,22 +207,17 @@
                     pageFlip.flipNext();
                 });
 
-                // --- LÓGICA DE PANTALLA COMPLETA ---
+                // Pantalla completa
                 function toggleFullscreen() {
                     if (!document.fullscreenElement) {
                         document.documentElement.requestFullscreen().then(() => {
-                            // Al entrar en fullscreen, recalculamos para expandir al máximo el visor
-                            setTimeout(() => {
-                                pageFlip.update();
-                            }, 350);
+                            setTimeout(() => { pageFlip.update(); }, 350);
                         }).catch(err => {
-                            console.log(`Error al activar pantalla completa: ${err.message}`);
+                            console.log(`Error: ${err.message}`);
                         });
                     } else {
                         document.exitFullscreen().then(() => {
-                            setTimeout(() => {
-                                pageFlip.update();
-                            }, 350);
+                            setTimeout(() => { pageFlip.update(); }, 350);
                         });
                     }
                 }
@@ -223,16 +225,13 @@
                 btnFull.addEventListener('click', toggleFullscreen);
                 bookContainer.addEventListener('dblclick', toggleFullscreen);
 
-                // Detectar si el usuario sale de fullscreen con la tecla ESC
                 document.addEventListener('fullscreenchange', () => {
-                    setTimeout(() => {
-                        pageFlip.update();
-                    }, 350);
+                    setTimeout(() => { pageFlip.update(); }, 350);
                 });
 
             } catch (error) {
-                console.error("Error al cargar el PDF: ", error);
-                document.getElementById('loader').innerText = "Error al procesar el archivo PDF de la revista.";
+                console.error("Error: ", error);
+                document.getElementById('loader').innerText = "Error al procesar el archivo PDF.";
             }
         });
     </script>
