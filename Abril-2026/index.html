@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Revista Breves</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -14,9 +15,10 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
-      font-family: Arial, sans-serif;
+      height: 100vh;
       overflow: hidden;
+      font-family: Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
     }
 
     #loader {
@@ -27,59 +29,60 @@
       padding: 20px;
     }
 
-    #visor {
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      width: 100vw;
-      height: 100vh;
-      justify-content: center;
-      gap: 10px;
-    }
-
-    #canvas-wrapper {
+    #book-wrapper {
       display: flex;
       justify-content: center;
       align-items: center;
       flex: 1;
       width: 100%;
-      padding: 10px 10px 0 10px;
+      padding: 10px;
     }
 
-    canvas {
-      max-width: 100%;
-      max-height: 85vh;
-      display: block;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.8);
+    /* El contenedor del flipbook — tamaño calculado en JS */
+    #book-container {
+      display: none;
+      cursor: pointer;
+    }
+
+    .page {
       background: white;
+      overflow: hidden;
+    }
+
+    /* Canvas ocupa exactamente el div de página — sin estiramientos */
+    .page canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      image-rendering: auto;
     }
 
     .controles {
       display: flex;
       align-items: center;
       gap: 16px;
-      padding: 8px 0 12px 0;
+      padding: 8px 0 14px;
+      z-index: 10;
     }
 
     .btn {
       background: #333;
       color: white;
       border: 1px solid #555;
-      padding: 10px 26px;
-      font-size: 16px;
+      padding: 10px 24px;
+      font-size: 15px;
       border-radius: 5px;
       cursor: pointer;
       transition: background 0.2s;
       touch-action: manipulation;
-      -webkit-tap-highlight-color: transparent;
     }
-    .btn:hover { background: #555; }
-    .btn:disabled { opacity: 0.35; cursor: default; }
+    .btn:hover  { background: #555; }
+    .btn:disabled { opacity: 0.3; cursor: default; }
 
     #indicador {
       color: #bbb;
-      font-size: 15px;
-      min-width: 90px;
+      font-size: 14px;
+      min-width: 80px;
       text-align: center;
     }
 
@@ -94,7 +97,7 @@
       border-radius: 4px;
       cursor: pointer;
       z-index: 999;
-      transition: background 0.2s;
+      display: none;
     }
     #btn-fs:hover { background: rgba(0,0,0,0.9); }
   </style>
@@ -102,123 +105,142 @@
 <body>
 
   <div id="loader">Cargando revista...</div>
-  <button id="btn-fs" style="display:none">⛶ Pantalla completa</button>
+  <button id="btn-fs">⛶ Pantalla completa</button>
 
-  <div id="visor">
-    <div id="canvas-wrapper">
-      <canvas id="pdf-canvas"></canvas>
-    </div>
-    <div class="controles">
-      <button class="btn" id="btn-prev">◀ Anterior</button>
-      <span id="indicador">1 / 1</span>
-      <button class="btn" id="btn-next">Siguiente ▶</button>
-    </div>
+  <div id="book-wrapper">
+    <div id="book-container"></div>
+  </div>
+
+  <div class="controles" id="controles" style="display:none">
+    <button class="btn" id="btn-prev">◀ Anterior</button>
+    <span id="indicador">1 / 1</span>
+    <button class="btn" id="btn-next">Siguiente ▶</button>
   </div>
 
   <script>
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
-    const pdfUrl    = 'revista.pdf';
-    const canvas    = document.getElementById('pdf-canvas');
-    const ctx       = canvas.getContext('2d');
-    const loader    = document.getElementById('loader');
-    const visor     = document.getElementById('visor');
-    const indicador = document.getElementById('indicador');
-    const btnPrev   = document.getElementById('btn-prev');
-    const btnNext   = document.getElementById('btn-next');
-    const btnFs     = document.getElementById('btn-fs');
+    const pdfUrl = 'revista.pdf';
 
-    let pdfDoc      = null;
-    let currentPage = 1;
-    let rendering   = false;
-
-    async function renderPage(num) {
-      if (rendering) return;
-      rendering = true;
-
-      const page     = await pdfDoc.getPage(num);
-      const devicePR = window.devicePixelRatio || 1;
-
-      // Calcular escala para que llene la pantalla disponible
-      const maxW = window.innerWidth  * 0.96;
-      const maxH = window.innerHeight * 0.84;
-      const vp1  = page.getViewport({ scale: 1 });
-      const scale = Math.min(maxW / vp1.width, maxH / vp1.height) * devicePR;
-
-      const viewport    = page.getViewport({ scale });
-      canvas.width      = viewport.width;
-      canvas.height     = viewport.height;
-      canvas.style.width  = `${viewport.width  / devicePR}px`;
-      canvas.style.height = `${viewport.height / devicePR}px`;
-
-      ctx.imageSmoothingEnabled  = true;
-      ctx.imageSmoothingQuality  = 'high';
-
-      await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
-
-      indicador.textContent = `${num} / ${pdfDoc.numPages}`;
-      btnPrev.disabled = num <= 1;
-      btnNext.disabled = num >= pdfDoc.numPages;
-      rendering = false;
-    }
-
-    async function init() {
+    window.addEventListener('DOMContentLoaded', async () => {
       try {
-        pdfDoc = await pdfjsLib.getDocument(pdfUrl).promise;
-        loader.style.display = 'none';
-        visor.style.display  = 'flex';
-        btnFs.style.display  = 'block';
-        await renderPage(currentPage);
+        const pdf           = await pdfjsLib.getDocument(pdfUrl).promise;
+        const numPages      = pdf.numPages;
+        const bookContainer = document.getElementById('book-container');
+        const loader        = document.getElementById('loader');
+        const controles     = document.getElementById('controles');
+        const btnFs         = document.getElementById('btn-fs');
+        const indicador     = document.getElementById('indicador');
+        const btnPrev       = document.getElementById('btn-prev');
+        const btnNext       = document.getElementById('btn-next');
+
+        // Tamaño de una página para que llene la pantalla
+        const firstPage = await pdf.getPage(1);
+        const vp1       = firstPage.getViewport({ scale: 1 });
+        const ratio     = vp1.width / vp1.height;
+
+        const availW = window.innerWidth  * 0.94;
+        const availH = window.innerHeight * 0.84;
+
+        let pgH = availH;
+        let pgW = pgH * ratio;
+        if (pgW > availW) { pgW = availW; pgH = pgW / ratio; }
+
+        pgW = Math.round(pgW);
+        pgH = Math.round(pgH);
+
+        bookContainer.style.width  = pgW + 'px';
+        bookContainer.style.height = pgH + 'px';
+
+        // Escala de renderizado de alta calidad
+        const dpr         = window.devicePixelRatio || 1;
+        const renderScale = Math.max(2.5, dpr * 2);
+
+        // Renderizar todas las páginas en canvas
+        for (let i = 1; i <= numPages; i++) {
+          loader.innerText = `Cargando página ${i} de ${numPages}...`;
+          const page     = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: renderScale });
+
+          const canvas  = document.createElement('canvas');
+          const ctx     = canvas.getContext('2d');
+          canvas.width  = viewport.width;
+          canvas.height = viewport.height;
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
+
+          const div = document.createElement('div');
+          div.className = 'page';
+          div.style.width  = pgW + 'px';
+          div.style.height = pgH + 'px';
+          div.appendChild(canvas);
+          bookContainer.appendChild(div);
+        }
+
+        loader.style.display        = 'none';
+        bookContainer.style.display = 'block';
+        controles.style.display     = 'flex';
+        btnFs.style.display         = 'block';
+
+        // PageFlip — UNA sola página (width = pgW, no pgW/2)
+        const pageFlip = new St.PageFlip(bookContainer, {
+          width:        pgW,
+          height:       pgH,
+          showCover:    true,
+          usePortrait:  true,
+          autoSize:     false,
+          drawShadow:   true,
+          flippingTime: 700,
+          maxShadowOpacity: 0.4,
+        });
+
+        pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
+        function updateUI() {
+          const cur = pageFlip.getCurrentPageIndex() + 1;
+          indicador.textContent = `${cur} / ${numPages}`;
+          btnPrev.disabled = cur <= 1;
+          btnNext.disabled = cur >= numPages;
+        }
+        pageFlip.on('flip', updateUI);
+        updateUI();
+
+        btnPrev.addEventListener('click', () => { pageFlip.flipPrev(); });
+        btnNext.addEventListener('click', () => { pageFlip.flipNext(); });
+
+        // Teclas
+        document.addEventListener('keydown', e => {
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') pageFlip.flipNext();
+          if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   pageFlip.flipPrev();
+        });
+
+        // Swipe celular
+        let tx = 0;
+        bookContainer.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive: true });
+        bookContainer.addEventListener('touchend', e => {
+          const d = tx - e.changedTouches[0].clientX;
+          if (Math.abs(d) > 40) { d > 0 ? pageFlip.flipNext() : pageFlip.flipPrev(); }
+        }, { passive: true });
+
+        // Pantalla completa
+        btnFs.addEventListener('click', () => {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen().catch(console.error);
+          } else { document.exitFullscreen(); }
+        });
+        document.addEventListener('fullscreenchange', () => {
+          setTimeout(() => pageFlip.update(), 300);
+        });
+
       } catch (e) {
-        loader.innerText = 'Error al cargar revista.pdf. Verificá que el archivo esté en la misma carpeta.';
         console.error(e);
-      }
-    }
-
-    btnPrev.addEventListener('click', async () => {
-      if (currentPage > 1) { currentPage--; await renderPage(currentPage); }
-    });
-    btnNext.addEventListener('click', async () => {
-      if (currentPage < pdfDoc.numPages) { currentPage++; await renderPage(currentPage); }
-    });
-
-    // Teclas del teclado
-    document.addEventListener('keydown', async e => {
-      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-        if (currentPage < pdfDoc.numPages) { currentPage++; await renderPage(currentPage); }
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-        if (currentPage > 1) { currentPage--; await renderPage(currentPage); }
+        document.getElementById('loader').innerText =
+          'Error al cargar revista.pdf. Verificá que esté en la misma carpeta.';
       }
     });
-
-    // Swipe en celular
-    let touchX = 0;
-    canvas.addEventListener('touchstart', e => { touchX = e.touches[0].clientX; }, { passive: true });
-    canvas.addEventListener('touchend', async e => {
-      const diff = touchX - e.changedTouches[0].clientX;
-      if (Math.abs(diff) > 40) {
-        if (diff > 0 && currentPage < pdfDoc.numPages) { currentPage++; await renderPage(currentPage); }
-        if (diff < 0 && currentPage > 1)               { currentPage--; await renderPage(currentPage); }
-      }
-    }, { passive: true });
-
-    // Pantalla completa
-    btnFs.addEventListener('click', () => {
-      if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(console.error);
-      } else {
-        document.exitFullscreen();
-      }
-    });
-    document.addEventListener('fullscreenchange', () => {
-      renderPage(currentPage);
-    });
-
-    // Re-renderizar si cambia el tamaño de ventana
-    window.addEventListener('resize', () => { renderPage(currentPage); });
-
-    init();
   </script>
 </body>
 </html>
