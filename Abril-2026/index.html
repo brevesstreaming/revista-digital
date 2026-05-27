@@ -1,225 +1,176 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Revista Interactiva Breves</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
-    <style>
-        body {
-            background: #1c1c1c; 
-            margin: 0; 
-            padding: 0;
-            display: flex; 
-            flex-direction: column; 
-            justify-content: center; 
-            align-items: center;
-            height: 100vh; 
-            overflow: hidden; 
-            font-family: Arial, sans-serif; 
-            position: relative;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale; 
-            text-rendering: optimizeLegibility;
-        }
-        #book-wrapper { 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            width: 95vw; 
-            height: 82vh; 
-            transition: height 0.3s; 
-        }
-        #book-container { 
-            box-shadow: 0 10px 40px rgba(0,0,0,0.9); 
-            display: none; 
-            cursor: pointer; 
-        }
-        body:fullscreen #book-wrapper { 
-            height: 92vh; 
-        }
-        .page { 
-            background-color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.15); 
-        }
-        canvas { 
-            width: 100% !important; 
-            height: 100% !important; 
-            object-fit: contain; 
-            /* CORRECCIÓN: Quitamos 'pixelated' y dejamos suavizado de alta fidelidad */
-            image-rendering: -webkit-optimize-contrast; 
-            image-rendering: auto; 
-        }
-        .controles { 
-            margin-top: 12px; 
-            display: flex; 
-            gap: 20px; 
-            z-index: 10; 
-        }
-        .btn-nav { 
-            background-color: #333; 
-            color: white; 
-            border: 1px solid #555; 
-            padding: 10px 20px; 
-            cursor: pointer; 
-            border-radius: 4px;
-            font-size: 15px; 
-            transition: background 0.2s; 
-        }
-        .btn-nav:hover { 
-            background-color: #555; 
-        }
-        #btn-fullscreen { 
-            position: absolute; 
-            top: 15px; 
-            right: 15px; 
-            background-color: rgba(0, 0, 0, 0.6); 
-            color: white; 
-            border: 1px solid #666; 
-            padding: 8px 12px; 
-            cursor: pointer; 
-            border-radius: 4px; 
-            font-size: 13px;
-            z-index: 100; 
-            transition: background 0.2s; 
-        }
-        #btn-fullscreen:hover { 
-            background-color: rgba(0, 0, 0, 0.9); 
-        }
-        #loader { 
-            color: #ccc; 
-            font-size: 18px; 
-            position: absolute; 
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Revista Interactiva - Breves</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
+  <style>
+    body {
+      background: #1c1c1c; margin: 0; padding: 0;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+      height: 100vh; overflow: hidden; font-family: Arial, sans-serif; position: relative;
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+    }
+    #book-wrapper {
+      display: flex; justify-content: center; align-items: center;
+      width: 95vw; height: 82vh; transition: height 0.3s;
+    }
+    #book-container {
+      box-shadow: 0 10px 40px rgba(0,0,0,0.9);
+      display: none; cursor: pointer;
+    }
+    body:fullscreen #book-wrapper { height: 92vh; }
+
+    /* ✅ CORRECCIÓN PRINCIPAL: sin image-rendering pixelated ni filtros que emborronan */
+    .page {
+      background-color: white;
+      display: flex; justify-content: center; align-items: center;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.15);
+      overflow: hidden;
+    }
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain;
+      image-rendering: auto;        /* ← antes decía "pixelated", eso causaba el borroneado */
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .controles { margin-top: 12px; display: flex; gap: 20px; z-index: 10; }
+    .btn-nav {
+      background-color: #333; color: white; border: 1px solid #555;
+      padding: 10px 20px; cursor: pointer; border-radius: 4px;
+      font-size: 15px; transition: background 0.2s;
+    }
+    .btn-nav:hover { background-color: #555; }
+    #btn-fullscreen {
+      position: absolute; top: 15px; right: 15px;
+      background-color: rgba(0,0,0,0.6); color: white;
+      border: 1px solid #666; padding: 8px 12px; cursor: pointer;
+      border-radius: 4px; font-size: 13px; z-index: 100; transition: background 0.2s;
+    }
+    #btn-fullscreen:hover { background-color: rgba(0,0,0,0.9); }
+    #loader { color: #ccc; font-size: 18px; position: absolute; }
+  </style>
 </head>
 <body>
 
-    <div id="loader">Cargando edición en alta fidelidad...</div>
-    <button id="btn-fullscreen" style="display: none;">Fullscreen</button>
-    
-    <div id="book-wrapper">
-        <div id="book-container"></div>
-    </div>
-    
-    <div class="controles" id="controles-panel" style="display: none;">
-        <button class="btn-nav" id="btn-prev">Anterior</button>
-        <button class="btn-nav" id="btn-next">Siguiente</button>
-    </div>
+  <div id="loader">Cargando edición en alta fidelidad...</div>
+  <button id="btn-fullscreen" style="display:none;">Fullscreen ⛶</button>
+  <div id="book-wrapper">
+    <div id="book-container"></div>
+  </div>
+  <div class="controles" id="controles-panel" style="display:none;">
+    <button class="btn-nav" id="btn-prev">◀ Anterior</button>
+    <button class="btn-nav" id="btn-next">Siguiente ▶</button>
+  </div>
 
-<script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-    
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
     const pdfUrl = 'revista.pdf';
 
     window.addEventListener('DOMContentLoaded', async () => {
-        try {
-            const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
-            const bookContainer = document.getElementById('book-container');
-            const loader = document.getElementById('loader');
-            const controles = document.getElementById('controles-panel');
-            const btnFull = document.getElementById('btn-fullscreen');
-            
-            const numPages = pdf.numPages;
-            const firstPage = await pdf.getPage(1);
-            
-            const originalViewport = firstPage.getViewport({ scale: 1.0 });
-            const ratio = originalViewport.width / originalViewport.height;
-            
-            const maxWidth = window.innerWidth * 0.95; 
-            const maxHeight = window.innerHeight * 0.82;
-            
-            let finalWidth = maxWidth; 
-            let finalHeight = (maxWidth / 2) / ratio;
-            
-            if (finalHeight > maxHeight) { 
-                finalHeight = maxHeight; 
-                finalWidth = (maxHeight * ratio) * 2; 
-            }
-            
-            // CORRECCIÓN: Limpieza de sintaxis en los estilos dinámicos
-            bookContainer.style.width = `${Math.round(finalWidth)}px`;
-            bookContainer.style.height = `${Math.round(finalHeight)}px`;
-            
-            // CORRECCIÓN: Subimos la escala base a 3.0 para asegurar nitidez absoluta de textos
-            const renderScale = 3.0; 
+      try {
+        const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+        const bookContainer = document.getElementById('book-container');
+        const loader        = document.getElementById('loader');
+        const controles     = document.getElementById('controles-panel');
+        const btnFull       = document.getElementById('btn-fullscreen');
+        const numPages      = pdf.numPages;
 
-            for (let i = 1; i <= numPages; i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({ scale: renderScale });
-                
-                const canvas = document.createElement('canvas'); 
-                const context = canvas.getContext('2d');
-                
-                canvas.height = viewport.height; 
-                canvas.width = viewport.width;
-                
-                // Forzar al motor gráfico a usar la mejor calidad disponible
-                context.imageSmoothingEnabled = true; 
-                context.imageSmoothingQuality = 'high'; 
-                context.textBaseline = 'top';
-                
-                await page.render({ 
-                    canvasContext: context, 
-                    viewport: viewport, 
-                    intent: 'print' 
-                }).promise;
-                
-                const pageDiv = document.createElement('div'); 
-                pageDiv.className = 'page';
-                pageDiv.appendChild(canvas);
-                bookContainer.appendChild(pageDiv);
-            }
-            
-            loader.style.display = 'none'; 
-            bookContainer.style.display = 'block';
-            controles.style.display = 'flex'; 
-            btnFull.style.display = 'block';
-            
-            const pageFlip = new St.PageFlip(bookContainer, {
-                width: Math.round(finalWidth / 2), 
-                height: Math.round(finalHeight),
-                showCover: true, 
-                usePortrait: false, 
-                drawShadow: true, 
-                flippingTime: 800
-            });
-            
-            pageFlip.loadFromHTML(document.querySelectorAll('.page'));
-            
-            document.getElementById('btn-prev').addEventListener('click', () => { pageFlip.flipPrev(); });
-            document.getElementById('btn-next').addEventListener('click', () => { pageFlip.flipNext(); });
-            
-            function toggleFullscreen() {
-                if (!document.fullscreenElement) {
-                    document.documentElement.requestFullscreen().then(() => { 
-                        setTimeout(() => { pageFlip.update(); }, 350); 
-                    }).catch(err => { 
-                        console.log(`Error: ${err.message}`); 
-                    });
-                } else { 
-                    document.exitFullscreen().then(() => { 
-                        setTimeout(() => { pageFlip.update(); }, 350); 
-                    }); 
-                }
-            }
-            
-            btnFull.addEventListener('click', toggleFullscreen);
-            bookContainer.addEventListener('dblclick', toggleFullscreen);
-            
-            document.addEventListener('fullscreenchange', () => { 
-                setTimeout(() => { pageFlip.update(); }, 350); 
-            });
-            
-        } catch (error) { 
-            console.error("Error: ", error);
-            document.getElementById('loader').innerText = "Error al procesar el archivo PDF."; 
+        const firstPage       = await pdf.getPage(1);
+        const originalViewport = firstPage.getViewport({ scale: 1.0 });
+        const ratio           = originalViewport.width / originalViewport.height;
+
+        const maxWidth  = window.innerWidth  * 0.95;
+        const maxHeight = window.innerHeight * 0.82;
+        let finalWidth  = maxWidth;
+        let finalHeight = (maxWidth / 2) / ratio;
+        if (finalHeight > maxHeight) {
+          finalHeight = maxHeight;
+          finalWidth  = (maxHeight * ratio) * 2;
         }
+
+        bookContainer.style.width  = `${Math.round(finalWidth)}px`;
+        bookContainer.style.height = `${Math.round(finalHeight)}px`;
+
+        // ✅ Escala de renderizado alta para nitidez real
+        const deviceRatio   = window.devicePixelRatio || 1;
+        const renderScale   = Math.max(2.5, deviceRatio * 2.0);
+
+        for (let i = 1; i <= numPages; i++) {
+          const page     = await pdf.getPage(i);
+          const viewport = page.getViewport({ scale: renderScale });
+
+          const canvas  = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          canvas.height = viewport.height;
+          canvas.width  = viewport.width;
+
+          // ✅ Suavizado correcto (no pixelado)
+          context.imageSmoothingEnabled  = true;
+          context.imageSmoothingQuality  = 'high';
+          context.textBaseline           = 'top';
+
+          await page.render({
+            canvasContext: context,
+            viewport:      viewport,
+            intent:        'print'
+          }).promise;
+
+          const pageDiv = document.createElement('div');
+          pageDiv.className = 'page';
+          pageDiv.appendChild(canvas);
+          bookContainer.appendChild(pageDiv);
+        }
+
+        loader.style.display    = 'none';
+        bookContainer.style.display = 'block';
+        controles.style.display = 'flex';
+        btnFull.style.display   = 'block';
+
+        const pageFlip = new St.PageFlip(bookContainer, {
+          width:       Math.round(finalWidth / 2),
+          height:      Math.round(finalHeight),
+          showCover:   true,
+          usePortrait: false,
+          drawShadow:  true,
+          flippingTime: 800
+        });
+
+        pageFlip.loadFromHTML(document.querySelectorAll('.page'));
+
+        document.getElementById('btn-prev').addEventListener('click', () => { pageFlip.flipPrev(); });
+        document.getElementById('btn-next').addEventListener('click', () => { pageFlip.flipNext(); });
+
+        function toggleFullscreen() {
+          if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen()
+              .then(() => { setTimeout(() => { pageFlip.update(); }, 350); })
+              .catch(err => { console.log(`Error: ${err.message}`); });
+          } else {
+            document.exitFullscreen()
+              .then(() => { setTimeout(() => { pageFlip.update(); }, 350); });
+          }
+        }
+
+        btnFull.addEventListener('click', toggleFullscreen);
+        bookContainer.addEventListener('dblclick', toggleFullscreen);
+        document.addEventListener('fullscreenchange', () => {
+          setTimeout(() => { pageFlip.update(); }, 350);
+        });
+
+      } catch (error) {
+        console.error("Error: ", error);
+        document.getElementById('loader').innerText = "Error al procesar el archivo PDF.";
+      }
     });
-</script>
+  </script>
 </body>
 </html>
