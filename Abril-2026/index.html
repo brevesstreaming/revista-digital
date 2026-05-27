@@ -7,65 +7,128 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/page-flip/dist/js/page-flip.browser.min.js"></script>
   <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
     body {
-      background: #1c1c1c; margin: 0; padding: 0;
-      display: flex; flex-direction: column; justify-content: center; align-items: center;
-      height: 100vh; overflow: hidden; font-family: Arial, sans-serif; position: relative;
-      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+      background: #1c1c1c;
+      margin: 0; padding: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      position: relative;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       text-rendering: optimizeLegibility;
     }
+
     #book-wrapper {
-      display: flex; justify-content: center; align-items: center;
-      width: 95vw; height: 82vh; transition: height 0.3s;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      height: 88vh;
     }
+
     #book-container {
       box-shadow: 0 10px 40px rgba(0,0,0,0.9);
-      display: none; cursor: pointer;
+      display: none;
+      cursor: pointer;
     }
-    body:fullscreen #book-wrapper { height: 92vh; }
 
-    /* ✅ CORRECCIÓN PRINCIPAL: sin image-rendering pixelated ni filtros que emborronan */
+    body:fullscreen #book-wrapper { height: 96vh; }
+
     .page {
       background-color: white;
-      display: flex; justify-content: center; align-items: center;
-      box-shadow: inset 0 0 20px rgba(0,0,0,0.15);
+      display: flex;
+      justify-content: center;
+      align-items: center;
       overflow: hidden;
     }
+
     canvas {
       display: block;
       width: 100% !important;
       height: 100% !important;
       object-fit: contain;
-      image-rendering: auto;        /* ← antes decía "pixelated", eso causaba el borroneado */
-      -webkit-font-smoothing: antialiased;
+      image-rendering: auto;
     }
 
-    .controles { margin-top: 12px; display: flex; gap: 20px; z-index: 10; }
+    .controles {
+      margin-top: 10px;
+      display: flex;
+      gap: 16px;
+      z-index: 10;
+      align-items: center;
+    }
+
     .btn-nav {
-      background-color: #333; color: white; border: 1px solid #555;
-      padding: 10px 20px; cursor: pointer; border-radius: 4px;
-      font-size: 15px; transition: background 0.2s;
+      background-color: #333;
+      color: white;
+      border: 1px solid #555;
+      padding: 10px 24px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 15px;
+      transition: background 0.2s;
+      touch-action: manipulation;
     }
     .btn-nav:hover { background-color: #555; }
+
+    #page-indicator {
+      color: #aaa;
+      font-size: 14px;
+      min-width: 80px;
+      text-align: center;
+    }
+
     #btn-fullscreen {
-      position: absolute; top: 15px; right: 15px;
-      background-color: rgba(0,0,0,0.6); color: white;
-      border: 1px solid #666; padding: 8px 12px; cursor: pointer;
-      border-radius: 4px; font-size: 13px; z-index: 100; transition: background 0.2s;
+      position: absolute;
+      top: 12px; right: 12px;
+      background-color: rgba(0,0,0,0.6);
+      color: white;
+      border: 1px solid #666;
+      padding: 8px 12px;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 13px;
+      z-index: 100;
+      transition: background 0.2s;
+      touch-action: manipulation;
     }
     #btn-fullscreen:hover { background-color: rgba(0,0,0,0.9); }
-    #loader { color: #ccc; font-size: 18px; position: absolute; }
+
+    #loader {
+      color: #ccc;
+      font-size: 18px;
+      position: absolute;
+      text-align: center;
+      padding: 0 20px;
+    }
+
+    /* Celular: botones más grandes */
+    @media (max-width: 600px) {
+      .btn-nav { padding: 12px 20px; font-size: 16px; }
+      #book-wrapper { height: 84vh; }
+      .controles { gap: 10px; }
+    }
   </style>
 </head>
 <body>
 
-  <div id="loader">Cargando edición en alta fidelidad...</div>
+  <div id="loader">Cargando edición...</div>
   <button id="btn-fullscreen" style="display:none;">Fullscreen ⛶</button>
+
   <div id="book-wrapper">
     <div id="book-container"></div>
   </div>
+
   <div class="controles" id="controles-panel" style="display:none;">
     <button class="btn-nav" id="btn-prev">◀ Anterior</button>
+    <span id="page-indicator">1 / 1</span>
     <button class="btn-nav" id="btn-next">Siguiente ▶</button>
   </div>
 
@@ -77,46 +140,51 @@
 
     window.addEventListener('DOMContentLoaded', async () => {
       try {
-        const pdf = await pdfjsLib.getDocument(pdfUrl).promise;
+        const pdf       = await pdfjsLib.getDocument(pdfUrl).promise;
+        const numPages  = pdf.numPages;
         const bookContainer = document.getElementById('book-container');
         const loader        = document.getElementById('loader');
         const controles     = document.getElementById('controles-panel');
         const btnFull       = document.getElementById('btn-fullscreen');
-        const numPages      = pdf.numPages;
+        const indicator     = document.getElementById('page-indicator');
 
-        const firstPage       = await pdf.getPage(1);
+        // --- Calcular tamaño: página simple ocupa casi toda la pantalla ---
+        const firstPage        = await pdf.getPage(1);
         const originalViewport = firstPage.getViewport({ scale: 1.0 });
-        const ratio           = originalViewport.width / originalViewport.height;
+        const ratio            = originalViewport.width / originalViewport.height;
 
-        const maxWidth  = window.innerWidth  * 0.95;
-        const maxHeight = window.innerHeight * 0.82;
-        let finalWidth  = maxWidth;
-        let finalHeight = (maxWidth / 2) / ratio;
-        if (finalHeight > maxHeight) {
-          finalHeight = maxHeight;
-          finalWidth  = (maxHeight * ratio) * 2;
+        const availW = window.innerWidth  * 0.92;
+        const availH = window.innerHeight * 0.86;
+
+        // Modo página simple: el ancho es de UNA página (no doble)
+        let finalH = availH;
+        let finalW = finalH * ratio;
+        if (finalW > availW) {
+          finalW = availW;
+          finalH = finalW / ratio;
         }
 
-        bookContainer.style.width  = `${Math.round(finalWidth)}px`;
-        bookContainer.style.height = `${Math.round(finalHeight)}px`;
+        bookContainer.style.width  = `${Math.round(finalW)}px`;
+        bookContainer.style.height = `${Math.round(finalH)}px`;
 
-        // ✅ Escala de renderizado alta para nitidez real
+        // Escala de renderizado adaptada a la pantalla
         const deviceRatio   = window.devicePixelRatio || 1;
         const renderScale   = Math.max(2.5, deviceRatio * 2.0);
 
+        // Renderizar cada página
         for (let i = 1; i <= numPages; i++) {
+          loader.innerText = `Cargando página ${i} de ${numPages}...`;
           const page     = await pdf.getPage(i);
           const viewport = page.getViewport({ scale: renderScale });
 
           const canvas  = document.createElement('canvas');
           const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
           canvas.width  = viewport.width;
+          canvas.height = viewport.height;
 
-          // ✅ Suavizado correcto (no pixelado)
-          context.imageSmoothingEnabled  = true;
-          context.imageSmoothingQuality  = 'high';
-          context.textBaseline           = 'top';
+          context.imageSmoothingEnabled = true;
+          context.imageSmoothingQuality = 'high';
+          context.textBaseline          = 'top';
 
           await page.render({
             canvasContext: context,
@@ -130,36 +198,61 @@
           bookContainer.appendChild(pageDiv);
         }
 
-        loader.style.display    = 'none';
+        loader.style.display        = 'none';
         bookContainer.style.display = 'block';
-        controles.style.display = 'flex';
-        btnFull.style.display   = 'block';
+        controles.style.display     = 'flex';
+        btnFull.style.display       = 'block';
 
+        // PageFlip en modo página simple (usePortrait: true)
         const pageFlip = new St.PageFlip(bookContainer, {
-          width:       Math.round(finalWidth / 2),
-          height:      Math.round(finalHeight),
-          showCover:   true,
-          usePortrait: false,
-          drawShadow:  true,
-          flippingTime: 800
+          width:        Math.round(finalW),
+          height:       Math.round(finalH),
+          showCover:    true,
+          usePortrait:  true,   // ← página simple
+          drawShadow:   true,
+          flippingTime: 700
         });
 
         pageFlip.loadFromHTML(document.querySelectorAll('.page'));
 
-        document.getElementById('btn-prev').addEventListener('click', () => { pageFlip.flipPrev(); });
-        document.getElementById('btn-next').addEventListener('click', () => { pageFlip.flipNext(); });
+        // Actualizar indicador de página
+        function updateIndicator() {
+          const current = pageFlip.getCurrentPageIndex() + 1;
+          indicator.textContent = `${current} / ${numPages}`;
+        }
+        pageFlip.on('flip', updateIndicator);
+        updateIndicator();
 
+        document.getElementById('btn-prev').addEventListener('click', () => {
+          pageFlip.flipPrev();
+        });
+        document.getElementById('btn-next').addEventListener('click', () => {
+          pageFlip.flipNext();
+        });
+
+        // Swipe táctil para celular
+        let touchStartX = 0;
+        bookContainer.addEventListener('touchstart', e => {
+          touchStartX = e.touches[0].clientX;
+        }, { passive: true });
+        bookContainer.addEventListener('touchend', e => {
+          const diff = touchStartX - e.changedTouches[0].clientX;
+          if (Math.abs(diff) > 40) {
+            diff > 0 ? pageFlip.flipNext() : pageFlip.flipPrev();
+          }
+        }, { passive: true });
+
+        // Pantalla completa
         function toggleFullscreen() {
           if (!document.fullscreenElement) {
             document.documentElement.requestFullscreen()
               .then(() => { setTimeout(() => { pageFlip.update(); }, 350); })
-              .catch(err => { console.log(`Error: ${err.message}`); });
+              .catch(err => console.log(err));
           } else {
             document.exitFullscreen()
               .then(() => { setTimeout(() => { pageFlip.update(); }, 350); });
           }
         }
-
         btnFull.addEventListener('click', toggleFullscreen);
         bookContainer.addEventListener('dblclick', toggleFullscreen);
         document.addEventListener('fullscreenchange', () => {
@@ -167,8 +260,9 @@
         });
 
       } catch (error) {
-        console.error("Error: ", error);
-        document.getElementById('loader').innerText = "Error al procesar el archivo PDF.";
+        console.error("Error:", error);
+        document.getElementById('loader').innerText =
+          "Error al cargar el archivo PDF. Verificá que revista.pdf esté en la misma carpeta.";
       }
     });
   </script>
